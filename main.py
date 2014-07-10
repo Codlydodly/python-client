@@ -7,6 +7,21 @@ from pyglet import image
 from pyglet.gl import *
 from pyglet.graphics import TextureGroup
 from pyglet.window import key, mouse
+import socket
+
+
+TCP_IP = '127.0.0.1'
+TCP_PORT = 5005
+BUFFER_SIZE = 1024
+import socket
+
+
+TCP_IP = '127.0.0.1'
+TCP_PORT = 5005
+BUFFER_SIZE = 1024
+MESSAGE = "Hello, World!"
+
+
 
 TICKS_PER_SEC = 60
 
@@ -30,10 +45,13 @@ TERMINAL_VELOCITY = 50
 
 PLAYER_HEIGHT = 2
 
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.connect((TCP_IP, TCP_PORT))
+
 def cube_vertices(x, y, z, n):
     """ Return the vertices of the cube at position x, y, z with size 2*n.
 
-    """
+    """    
     return [
         x-n,y+n,z-n, x-n,y+n,z+n, x+n,y+n,z+n, x+n,y+n,z-n,  # top
         x-n,y-n,z-n, x+n,y-n,z-n, x+n,y-n,z+n, x-n,y-n,z+n,  # bottom
@@ -44,7 +62,7 @@ def cube_vertices(x, y, z, n):
     ]
 
 
-def tex_coord(x, y, n=4):
+def tex_coord(x, y, n=16):
     """ Return the bounding vertices of the texture square.
 
     """
@@ -69,11 +87,11 @@ def tex_coords(top, bottom, side):
 
 
 TEXTURE_PATH = 'texture.png'
-
-GRASS = tex_coords((1, 0), (0, 1), (0, 0))
-SAND = tex_coords((1, 1), (1, 1), (1, 1))
-BRICK = tex_coords((2, 0), (2, 0), (2, 0))
-STONE = tex_coords((2, 1), (2, 1), (2, 1))
+GRASS = tex_coords((0, 15), (2, 15), (3, 15))
+SAND = tex_coords((0, 4), (0, 4), (0, 4))
+BRICK = tex_coords((7, 15), (7, 15), (7, 15))
+STONE = tex_coords((1, 15), (1, 15), (1, 15))
+BEDROCK = tex_coords((1, 14), (1, 14), (1, 14))
 
 FACES = [
     ( 0, 1, 0),
@@ -160,11 +178,13 @@ class Model(object):
             for z in xrange(-n, n + 1, s):
                 # create a layer stone an grass everywhere.
                 self.add_block((x, y - 2, z), GRASS, immediate=False)
-                self.add_block((x, y - 3, z), STONE, immediate=False)
+                self.add_block((x, y - 10, z), BEDROCK, immediate=False)           
+                for i in range(3, 10):
+                    self.add_block((x, y - i, z), STONE, immediate=False)
                 if x in (-n, n) or z in (-n, n):
                     # create outer walls.
-                    for dy in xrange(-2, 3):
-                        self.add_block((x, y + dy, z), STONE, immediate=False)
+                    for dy in xrange(-10, 3):
+                        self.add_block((x, y + dy, z), BEDROCK, immediate=False)
 
         # generate the hills randomly
         o = n - 10
@@ -175,7 +195,7 @@ class Model(object):
             h = random.randint(1, 6)  # height of the hill
             s = random.randint(4, 8)  # 2 * s is the side length of the hill
             d = 1  # how quickly to taper off the hills
-            t = random.choice([GRASS, SAND, BRICK])
+            t = random.choice([GRASS, SAND, BRICK, STONE])
             for y in xrange(c, c + h):
                 for x in xrange(a - s, a + s + 1):
                     for z in xrange(b - s, b + s + 1):
@@ -447,6 +467,7 @@ class Window(pyglet.window.Window):
         # Current (x, y, z) position in the world, specified with floats. Note
         # that, perhaps unlike in math class, the y-axis is the vertical axis.
         self.position = (0, 0, 0)
+        self.last_position = ""
 
         # First element is rotation of the player in the x-z plane (ground
         # plane) measured from the z-axis down. The second is the rotation
@@ -676,7 +697,7 @@ class Window(pyglet.window.Window):
                     self.model.add_block(previous, self.block)
             elif button == pyglet.window.mouse.LEFT and block:
                 texture = self.model.world[block]
-                if texture != STONE:
+                if texture != BEDROCK:
                     self.model.remove_block(block)
         else:
             self.set_exclusive_mouse(True)
@@ -725,7 +746,7 @@ class Window(pyglet.window.Window):
                 self.dy = JUMP_SPEED
         elif symbol == key.ESCAPE:
             self.set_exclusive_mouse(False)
-        elif symbol == key.TAB:
+        elif symbol == key.F:
             self.flying = not self.flying
         elif symbol in self.num_keys:
             index = (symbol - self.num_keys[0]) % len(self.inventory)
@@ -831,9 +852,17 @@ class Window(pyglet.window.Window):
 
         """
         x, y, z = self.position
+        
         self.label.text = '%02d (%.2f, %.2f, %.2f) %d / %d' % (
             pyglet.clock.get_fps(), x, y, z,
-            len(self.model._shown), len(self.model.world))
+            len(self.model._shown), len(self.model.world))        
+
+        msg = ','.join(str(i) for i in self.position)
+        
+        if self.last_position == "" or self.last_position != msg:
+            s.send(msg)
+            self.last_position = msg
+        
         self.label.draw()
 
     def draw_reticle(self):
@@ -892,3 +921,8 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+
+#data = s.recv(BUFFER_SIZE)
+#s.close()
